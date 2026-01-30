@@ -4,7 +4,8 @@
   "description": "店铺数据统计",
   "type": "module",
   "scripts": {
-    "gen:xlsx": "tsx src/scripts/json-to-xlsx.ts"
+    "gen:template": "tsx src/scripts/json-to-xlsx.ts",
+    "gen:data": "tsx src/scripts/xlsx-to-json.ts"
   },
   "dependencies": {
     "xlsx": "^0.18.5"

@@ -32,7 +32,7 @@ function formulaWithRefs(
   formulaStr: string,
   currentColumns: string[],
   excelRow: number,
-  allSheets: Map<string, SheetInfo>
+  allSheets: Map<string, SheetInfo>,
 ): string {
   const nameToRef = new Map<string, string>();
   for (let i = 0; i < currentColumns.length; i++) {
@@ -65,8 +65,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const jsonPath = join(__dirname, '../data/店铺数据统计.json');
-const outDir = join(__dirname, '../render');
-const outPath = join(outDir, '店铺数据统计.xlsx');
+const outDir = join(__dirname, '../render-template');
+const outPath = join(outDir, '店铺数据统计-模板.xlsx');
 
 const data: DataFile = JSON.parse(readFileSync(jsonPath, 'utf-8'));
 const workbook = XLSX.utils.book_new();
@@ -96,7 +96,7 @@ for (const sheet of data.sheets) {
           formulaStr,
           header,
           excelRow,
-          sheetInfo
+          sheetInfo,
         );
         const ref = colToLetter(colIdx) + excelRow;
         const isPercent = colName.endsWith('%');
