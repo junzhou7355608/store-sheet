@@ -15,41 +15,38 @@ interface DataFile {
   sheets: SheetData[];
 }
 
-/** Excel 序列号转 yyyy-mm-dd 或 yyyy-mm（用 UTC 避免时区） */
-function excelSerialToDate(serial: number, colName?: string): string {
-  const epoch = Date.UTC(1899, 11, 30);
-  const d = new Date(epoch + serial * 24 * 60 * 60 * 1000);
-  const y = d.getUTCFullYear(),
-    m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  if (colName === '月份') return `${y}-${m}`;
-  return `${y}-${m}-${String(d.getUTCDate()).padStart(2, '0')}`;
-}
+/** 日期/月份列名，与 json-to-xlsx 一致，统一按字符串读写 */
+const DATE_COLUMNS = ['日期', '月份'];
 
-/** 从单元格取值：优先显示值，其次原始值，公式格取计算后的值 */
+/** 从单元格取值：优先显示值，其次原始值，公式格取计算后的值。日期/月份统一按字符串读写。 */
 function getCellValue(
   cell: XLSX.CellObject | undefined,
   colName?: string,
 ): string | number {
   if (!cell) return '';
+  if (cell.t === 's' && typeof cell.v === 'string') return cell.v;
   if (cell.t === 'n' && typeof cell.v === 'number') {
-    if ((colName === '日期' || colName === '月份') && cell.v >= 1 && cell.v < 100000)
-      return excelSerialToDate(cell.v, colName);
+    if (colName && DATE_COLUMNS.includes(colName) && cell.v >= 1 && cell.v < 100000) {
+      const epoch = Date.UTC(1900, 0, 1);
+      const d = new Date(epoch + (cell.v - 1) * 24 * 60 * 60 * 1000);
+      const y = d.getUTCFullYear(),
+        m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      if (colName === '月份') return `${y}-${m}`;
+      return `${y}-${m}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    }
     return cell.v;
   }
-  if (cell.t === 's' && typeof cell.v === 'string') return cell.v;
   if (cell.t === 'd' && cell.v instanceof Date) {
     const d = cell.v;
-    if (colName === '月份') {
-      if (typeof cell.w === 'string' && /^\d{4}-\d{1,2}$/.test(cell.w)) return cell.w;
+    if (colName === '月份')
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    }
-    if (colName === '日期' && typeof cell.w === 'string' && /^\d{4}-\d{1,2}-\d{1,2}$/.test(cell.w))
-      return cell.w;
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    if (colName === '日期')
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return cell.v;
   }
   if (cell.t === 'b') return cell.v ? 'TRUE' : 'FALSE';
   if (typeof cell.v === 'string' || typeof cell.v === 'number') return cell.v;
-  if (cell.w) return cell.w; // 格式化后的字符串
+  if (cell.w) return cell.w;
   return '';
 }
 

@@ -27,60 +27,39 @@ function colToLetter(i: number): string {
 /** 各表信息：表名 -> 列名数组、行数，用于生成跨表区域 */
 type SheetInfo = { columns: string[]; rowCount: number };
 
-/** 列名 -> Excel 数字格式（日期/月份），避免 Excel 自动转换显示格式 */
-const COLUMN_FORMATS: Record<string, string> = {
-  日期: 'yyyy-mm-dd',
-  月份: 'yyyy-mm',
-};
+/** 日期/月份列名，统一以字符串写入 Excel，与 JSON 一致 */
+const DATE_COLUMNS = ['日期', '月份'];
 
-/** Excel 日期序列：1899-12-30 为 0，纯日期无时间 */
-function toExcelSerial(y: number, m: number, d: number): number {
-  const epoch = Date.UTC(1899, 11, 30);
-  const date = Date.UTC(y, m - 1, d);
-  return Math.round((date - epoch) / (24 * 60 * 60 * 1000));
-}
-
-/** 将日期字符串转为 Excel 序列号（纯日期无时间，编辑栏不显示 08:00） */
+/** 日期/月份列：将值规范为 yyyy-mm-dd 或 yyyy-mm 字符串写入 Excel，并设为文本格式 @，避免回车后被 Excel 转成 2026/1/28 等系统日期格式 */
 function makeDateCell(
   val: unknown,
   colName: string,
-): { t: 'n'; v: number; z: string } | null {
-  const fmt = COLUMN_FORMATS[colName];
-  if (!fmt || val === '' || val === undefined) return null;
+): { t: 's'; v: string; z: string } | null {
+  if (!DATE_COLUMNS.includes(colName) || val === '' || val === undefined)
+    return null;
   const s = String(val).trim();
   if (!s) return null;
   const dMatch = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (dMatch) {
     const [, y, m, d] = dMatch;
-    const serial = toExcelSerial(+y, +m, +d);
-    if (Number.isFinite(serial)) return { t: 'n', v: serial, z: fmt };
+    return { t: 's' as const, v: `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`, z: '@' };
   }
   const mMatch = s.match(/^(\d{4})-(\d{1,2})$/);
   if (mMatch) {
     const [, y, m] = mMatch;
-    // 月份存为文本，便于 MATCH(TEXT(日期,"YYYY-MM"), 月度利润!月份) 等公式匹配
-    return { t: 's' as const, v: `${y}-${m.padStart(2, '0')}` };
+    return { t: 's' as const, v: `${y}-${m.padStart(2, '0')}`, z: '@' };
   }
   return null;
 }
 
-/** 将公式里的列名替换为单元格引用；表名!列名 替换为对应表的数据区域 */
+/** 将公式里的列名替换为单元格引用；表名!列名 替换为对应表的数据区域。先替换跨表引用，再替换同表列名，避免「日期」把「采购明细!日期」误替换成「采购明细!A2」。 */
 function formulaWithRefs(
   formulaStr: string,
   currentColumns: string[],
   excelRow: number,
   allSheets: Map<string, SheetInfo>,
 ): string {
-  const nameToRef = new Map<string, string>();
-  for (let i = 0; i < currentColumns.length; i++) {
-    nameToRef.set(currentColumns[i], colToLetter(i) + excelRow);
-  }
-  const sortedNames = [...currentColumns].sort((a, b) => b.length - a.length);
   let out = formulaStr;
-  for (const name of sortedNames) {
-    const ref = nameToRef.get(name)!;
-    out = out.split(name).join(ref);
-  }
   const sheetNames = [...allSheets.keys()].sort((a, b) => b.length - a.length);
   for (const sheetName of sheetNames) {
     const info = allSheets.get(sheetName)!;
@@ -94,6 +73,15 @@ function formulaWithRefs(
       const range = `${sheetName}!$${letter}$${r2}:$${letter}$${rEnd}`;
       out = out.split(token).join(range);
     }
+  }
+  const nameToRef = new Map<string, string>();
+  for (let i = 0; i < currentColumns.length; i++) {
+    nameToRef.set(currentColumns[i], colToLetter(i) + excelRow);
+  }
+  const sortedNames = [...currentColumns].sort((a, b) => b.length - a.length);
+  for (const name of sortedNames) {
+    const ref = nameToRef.get(name)!;
+    out = out.split(name).join(ref);
   }
   return out;
 }
