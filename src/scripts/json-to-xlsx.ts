@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from 'fs';
+import { mkdirSync, readdirSync, readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import XLSX from 'xlsx';
@@ -64,54 +64,72 @@ function formulaWithRefs(
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const jsonPath = join(__dirname, '../data/店铺数据统计.json');
+const dataDir = join(__dirname, '../data');
 const outDir = join(__dirname, '../render-template');
-const outPath = join(outDir, '店铺数据统计-模板.xlsx');
 
-const data: DataFile = JSON.parse(readFileSync(jsonPath, 'utf-8'));
-const workbook = XLSX.utils.book_new();
-
-const sheetInfo = new Map<string, SheetInfo>();
-for (const sheet of data.sheets) {
-  sheetInfo.set(sheet.name, {
-    columns: sheet.columns,
-    rowCount: sheet.rows.length,
-  });
+/** 从 data 目录读取所有 .json 的基础名（排除 schema.json 和 copy 备份） */
+function getJsonBaseNames(): string[] {
+  return readdirSync(dataDir)
+    .filter(
+      (f) =>
+        f.endsWith('.json') &&
+        f !== 'schema.json' &&
+        !f.replace(/\.json$/i, '').endsWith(' copy'),
+    )
+    .map((f) => f.replace(/\.json$/i, ''));
 }
 
-for (const sheet of data.sheets) {
-  const header = sheet.columns;
-  const rows = sheet.rows.map((row) => header.map((col) => row[col] ?? ''));
-  const sheetData = [header, ...rows];
-  const ws = XLSX.utils.aoa_to_sheet(sheetData);
+function buildXlsx(baseName: string): void {
+  const jsonPath = join(dataDir, `${baseName}.json`);
+  const outPath = join(outDir, `${baseName}-模板.xlsx`);
 
-  const formulas = sheet.formulas;
-  if (formulas) {
-    for (let r = 0; r < sheet.rows.length; r++) {
-      const excelRow = r + 2;
-      for (const [colName, formulaStr] of Object.entries(formulas)) {
-        const colIdx = header.indexOf(colName);
-        if (colIdx === -1) continue;
-        const excelFormula = formulaWithRefs(
-          formulaStr,
-          header,
-          excelRow,
-          sheetInfo,
-        );
-        const ref = colToLetter(colIdx) + excelRow;
-        const isPercent = colName.endsWith('%');
-        ws[ref] = {
-          t: 'n',
-          f: '=' + excelFormula,
-          z: isPercent ? '0.00%' : '0.00',
-        };
-      }
-    }
+  const data: DataFile = JSON.parse(readFileSync(jsonPath, 'utf-8'));
+  const workbook = XLSX.utils.book_new();
+
+  const sheetInfo = new Map<string, SheetInfo>();
+  for (const sheet of data.sheets) {
+    sheetInfo.set(sheet.name, {
+      columns: sheet.columns,
+      rowCount: sheet.rows.length,
+    });
   }
 
-  XLSX.utils.book_append_sheet(workbook, ws, sheet.name);
+  for (const sheet of data.sheets) {
+    const header = sheet.columns;
+    const formulas = sheet.formulas;
+
+    const rows = sheet.rows.map((row, r) =>
+      header.map((col, c) => {
+        const isFormulaCol = formulas && col in formulas;
+        if (isFormulaCol) {
+          const excelRow = r + 2;
+          const excelFormula = formulaWithRefs(
+            formulas![col],
+            header,
+            excelRow,
+            sheetInfo,
+          );
+          const isPercent = col.endsWith('%');
+          const cached = row[col];
+          const v = typeof cached === 'number' ? cached : 0; // 缓存值供 Excel 显示
+          return { t: 'n' as const, v, f: excelFormula, z: isPercent ? '0.00%' : '0.00' };
+        }
+        return row[col] ?? '';
+      }),
+    );
+
+    const sheetData = [header, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+    XLSX.utils.book_append_sheet(workbook, ws, sheet.name);
+  }
+
+  mkdirSync(outDir, { recursive: true });
+  XLSX.writeFile(workbook, outPath);
+  console.log('已生成:', outPath);
 }
 
-mkdirSync(outDir, { recursive: true });
-XLSX.writeFile(workbook, outPath);
-console.log('已生成:', outPath);
+const baseNames = getJsonBaseNames();
+for (const baseName of baseNames) {
+  buildXlsx(baseName);
+}

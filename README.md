@@ -13,13 +13,19 @@ shop/
 ├── .vscode/
 │   └── settings.json
 └── src/
-    ├── data/
-    │   ├── schema.json           # 数据格式的 JSON Schema 定义
-    │   └── 店铺数据统计.json      # 示例/实际数据文件
-    ├── scripts/
-    │   └── json-to-xlsx.ts       # JSON → Excel 导出脚本
-    └── render/
-        └── 店铺数据统计.xlsx      # 脚本生成的 Excel 输出（可忽略版本控制）
+    ├── data/                      # 数据源（JSON）
+    │   └── 店铺数据统计.json
+    ├── schema/                    # 数据格式的 JSON Schema 定义
+    │   └── schema.json
+    ├── render-template/           # 模板（由 JSON 生成，含结构+公式）
+    │   └── 店铺数据统计-模板.xlsx
+    ├── render-data/               # 真实数据工作区（在此编辑 Excel）
+    │   └── 店铺数据统计.xlsx
+    └── scripts/
+        ├── json-to-xlsx.ts        # JSON → 模板 Excel
+        ├── xlsx-to-json.ts        # 工作区 Excel → JSON 同步
+        ├── inspect-xlsx.ts        # 排查：检查 xlsx 文件结构
+        └── debug-pipeline.ts      # 排查：完整流程诊断
 ```
 
 ## 数据格式说明
@@ -35,7 +41,7 @@ shop/
 
 ### Schema 校验
 
-数据文件通过 `"$schema": "./schema.json"` 引用 `schema.json`，可用支持 JSON Schema 的编辑器或工具做格式校验与自动补全。
+数据文件通过 `"$schema": "../schema/schema.json"` 引用 Schema，可用支持 JSON Schema 的编辑器或工具做格式校验与自动补全。
 
 ### 公式列（formulas）
 
@@ -55,10 +61,18 @@ shop/
 
 ## 使用方式
 
-1. **编辑数据**：直接编辑 `src/data/店铺数据统计.json`（或复制为新的 JSON 文件），保持符合 `schema.json` 的结构。
-2. **校验**：在 VS Code 等编辑器中打开 JSON 文件时，若已正确设置 `$schema`，会得到结构提示和错误高亮。
-3. **导出 Excel**：在项目根目录执行 `pnpm gen:xlsx`，会根据 JSON 生成 `src/render/店铺数据统计.xlsx`，便于分享或二次编辑。
-4. **扩展**：可在 `sheets` 中增加新工作表（新 Tab），或在现有工作表中增加列、行，只要符合 `schema.json` 中的定义即可。
+### 推荐工作流
+
+1. **生成模板**：`pnpm gen:template`，从 `data/*.json` 生成 `render-template/*-模板.xlsx`（含结构+公式）。
+2. **复制模板**：将模板复制到 `render-data/`（若结构有变更则需重新复制）。
+3. **编辑数据**：在 `render-data/*.xlsx` 中填入或修改真实数据。
+4. **同步 JSON**：`pnpm gen:data`，将 `render-data/` 的 Excel 写回 `data/*.json`，保持数据同步。
+
+### 其他
+
+- **直接编辑 JSON**：也可直接编辑 `src/data/*.json`，再运行 `gen:template` 生成模板。
+- **校验**：在 VS Code 等编辑器中打开 JSON 时，`$schema` 会提供结构提示和错误高亮。
+- **扩展**：可在 `sheets` 中增加新工作表、列、行，符合 `schema.json` 即可。
 
 ## 示例片段
 
@@ -92,17 +106,32 @@ shop/
 }
 ```
 
-## 导出 Excel（gen:xlsx）
+## 脚本说明
 
-- **命令**：`pnpm gen:xlsx`（内部执行 `tsx src/scripts/json-to-xlsx.ts`）
-- **输入**：`src/data/店铺数据统计.json`
-- **输出**：`src/render/店铺数据统计.xlsx`
-- **行为**：按 `sheets` 顺序生成多个工作表；若某表定义了 `formulas`，对应列会写入 Excel 公式（同表列名、`表名!列名` 会替换为单元格/区域引用）。
+### gen:template — JSON → 模板 Excel
+
+- **命令**：`pnpm gen:template`（执行 `tsx src/scripts/json-to-xlsx.ts`）
+- **输入**：`src/data/*.json`（排除 `schema.json` 和 `* copy.json`）
+- **输出**：`src/render-template/*-模板.xlsx`
+- **行为**：按 `sheets` 顺序生成多个工作表；`formulas` 中同表列名、`表名!列名` 会替换为 Excel 单元格/区域引用。
+
+### gen:data — Excel → JSON 同步
+
+- **命令**：`pnpm gen:data [文件名.xlsx]`（执行 `tsx src/scripts/xlsx-to-json.ts`）
+- **输入**：`src/render-data/店铺数据统计.xlsx`（默认）或传入的文件名
+- **输出**：`src/data/*.json`（覆盖同名数据文件）
+- **行为**：读取 Excel 各工作表，提取列名、公式（转为列名形式）、行数据；含 `$schema` 引用。
+
+### 排查脚本
+
+- **inspect-xlsx**：`npx tsx src/scripts/inspect-xlsx.ts [xlsx路径]` — 打印 sheet 结构、列名、首行数据、公式。
+- **debug-pipeline**：`npx tsx src/scripts/debug-pipeline.ts` — 分步检查模板与工作区 xlsx。
 
 ## 开发说明
 
 - **环境**：Node.js（建议 18+）、pnpm
 - **安装依赖**：`pnpm install`
 - **脚本**：
-  - `pnpm gen:xlsx` — 从 JSON 生成 Excel，见上文
+  - `pnpm gen:template` — JSON → 模板 Excel
+  - `pnpm gen:data [xlsx]` — Excel → JSON 同步
 - **代码规范**：项目使用 Prettier（见 `.prettierrc`），提交前可格式化 JSON/TS 等。
