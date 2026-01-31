@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
 import prettier from 'prettier';
+import { fileURLToPath } from 'url';
 import XLSX from 'xlsx';
 
 interface SheetData {
@@ -26,7 +26,12 @@ function getCellValue(
   if (!cell) return '';
   if (cell.t === 's' && typeof cell.v === 'string') return cell.v;
   if (cell.t === 'n' && typeof cell.v === 'number') {
-    if (colName && DATE_COLUMNS.includes(colName) && cell.v >= 1 && cell.v < 100000) {
+    if (
+      colName &&
+      DATE_COLUMNS.includes(colName) &&
+      cell.v >= 1 &&
+      cell.v < 100000
+    ) {
       const epoch = Date.UTC(1900, 0, 1);
       const d = new Date(epoch + (cell.v - 1) * 24 * 60 * 60 * 1000);
       const y = d.getUTCFullYear(),
