@@ -7,7 +7,7 @@
     "gen:template": "tsx src/scripts/json-to-xlsx.ts",
     "gen:data": "tsx src/scripts/xlsx-to-json.ts",
     "copy:template": "for f in src/render-template/*-模板.xlsx; do [ -f \"$f\" ] && b=$(basename \"$f\" .xlsx) && cp \"$f\" \"src/render-data/${b%-模板}.xlsx\"; done",
-    "gen": "pnpm gen:data && pnpm gen:template && pnpm copy:template && pnpm gen:data"
+    "sync": "pnpm gen:data && pnpm gen:template && pnpm copy:template && pnpm gen:data"
   },
   "dependencies": {
     "xlsx": "^0.18.5"
