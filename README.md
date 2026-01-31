@@ -5,7 +5,7 @@
 ## 项目结构
 
 ```
-shop/
+store-sheet/
 ├── README.md
 ├── package.json
 ├── tsconfig.json
