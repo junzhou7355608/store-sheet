@@ -93,21 +93,23 @@ function formulaToColumnNames(
   });
 }
 
-/** 将公式中的跨表区域（如 销售明细!$A$2:$A$4）转为 表名!列名，保证 round-trip 后仍是「全部行」约定 */
+/** 将公式中的跨表区域（如 销售明细!$A$2:$A$4）转为 表名!列名，保证 round-trip 后仍是「全部行」约定。
+ * 表名用 [\\u4e00-\\u9fa5\\w]+ 限定，避免 [^!]+ 贪婪匹配到公式里的 ( 等字符。 */
 function crossSheetRangeToColumnRef(
   formula: string,
   sheetNameToColumns: Map<string, string[]>,
 ): string {
   return formula.replace(
-    /([^!]+)!(\$[A-Z]+\$)(\d+):(\$[A-Z]+\$)(\d+)/g,
+    /([\u4e00-\u9fa5\w]+)!(\$[A-Z]+\$)(\d+):(\$[A-Z]+\$)(\d+)/g,
     (full, sheetName, colRef1, _r1, colRef2, _r2) => {
       if (colRef1 !== colRef2) return full; // 非同一列区域，保留
-      const columns = sheetNameToColumns.get(sheetName);
+      const normalizedSheet = sheetName.trim().replace(/^'|'$/g, ''); // Excel 可能给表名加单引号
+      const columns = sheetNameToColumns.get(normalizedSheet);
       if (!columns) return full;
       const letter = colRef1.replace(/\$/g, '');
       const colIdx = colLetterToIndex(letter);
       if (colIdx < 0 || colIdx >= columns.length) return full;
-      return `${sheetName}!${columns[colIdx]}`;
+      return `${normalizedSheet}!${columns[colIdx]}`;
     },
   );
 }
